@@ -224,7 +224,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = 'your-new-secure-secret-key-here'  # غيّر ده بقيمة جديدة من موقع زي djecrety.ir
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = False  # للإنتاج على Render
+DEBUG = True  # للإنتاج على Render
 
 ALLOWED_HOSTS = ['nursery-api-zzoo.onrender.com', '.onrender.com', 'localhost', '127.0.0.1']
 
