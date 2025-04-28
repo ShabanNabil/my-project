@@ -198,7 +198,6 @@
 # EMAIL_HOST_USER = 'your-email@gmail.com'  # حطي الـ email بتاعك
 # EMAIL_HOST_PASSWORD = 'your-app-password'  # حطي app password من Gmail
 
-
 """
 Django settings for Nursery_project project.
 
@@ -221,12 +220,12 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'your-new-secure-secret-key-here'  # غيّر ده بقيمة جديدة من موقع زي djecrety.ir
+SECRET_KEY = 'your-new-secure-secret-key-here'  # بنسيبه زي ما هو طالما الـ Repo مش Public
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True  # للإنتاج على Render
+DEBUG = True  # لسه True عشان نشوف أي أخطاء
 
-ALLOWED_HOSTS = ['nursery-api-zzoo.onrender.com', '.onrender.com', 'localhost', '127.0.0.1']
+ALLOWED_HOSTS = ['nursery-api-zzo0.onrender.com', '.onrender.com', 'localhost', '127.0.0.1']
 
 # Application definition
 
@@ -247,7 +246,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
-    'corsheaders.middleware.CorsMiddleware',  # أضفت ده عشان CORS يشتغل صح
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
@@ -317,8 +316,8 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
 STATIC_URL = 'static/'
-STATICFILES_DIRS = []  # للإشارة لأي مجلدات static إضافية (فاضي دلوقتي)
-STATIC_ROOT = BASE_DIR / "staticfiles"  # المجلد اللي هيجمع فيه Render الـ static files
+STATICFILES_DIRS = []
+STATIC_ROOT = BASE_DIR / "staticfiles"
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
@@ -328,7 +327,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 AUTH_USER_MODEL = 'App.User'
 
 # CORS settings for Flutter
-CORS_ALLOW_ALL_ORIGINS = True  # مؤقتًا عشان تطبيق Flutter يشتغل من أي مكان
+CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_METHODS = ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
 CORS_ALLOW_HEADERS = [
@@ -337,7 +336,7 @@ CORS_ALLOW_HEADERS = [
     'X-CSRFToken',
 ]
 
-# CSRF Trusted Origins (ممكن تمسحها لو بتستخدم CORS_ALLOW_ALL_ORIGINS)
+# CSRF Trusted Origins
 CSRF_TRUSTED_ORIGINS = [
     "http://localhost:52897",
     "http://127.0.0.1:52897",
@@ -381,18 +380,3 @@ SIMPLE_JWT = {
     'TOKEN_USER_CLASS': 'rest_framework_simplejwt.models.TokenUser',
     'JTI_CLAIM': 'jti',
 }
-
-# Email settings
-EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-EMAIL_HOST = 'smtp.gmail.com'
-EMAIL_PORT = 587
-EMAIL_USE_TLS = True
-EMAIL_HOST_USER = 'your-email@gmail.com'  # حط إيميلك هنا
-EMAIL_HOST_PASSWORD = 'your-app-password'  # حط الـ App Password بتاع Gmail هنا
-
-# إعدادات أمان إضافية
-SECURE_SSL_REDIRECT = True  # تفعيل HTTPS (Render بيوفّر HTTPS تلقائيًا)
-SESSION_COOKIE_SECURE = True  # الكوكيز تشتغل على HTTPS بس
-CSRF_COOKIE_SECURE = True  # الـ CSRF تشتغل على HTTPS بس
-SECURE_BROWSER_XSS_FILTER = True  # حماية من هجمات XSS
-SECURE_CONTENT_TYPE_NOSNIFF = True  # حماية ضد هجمات MIME-type sniffing
