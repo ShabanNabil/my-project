@@ -164,7 +164,6 @@ import uuid
 from django.core.mail import send_mail
 from .models import Parent, Nursery, User
 from .serializers import ParentSerializer, NurserySerializer
-# from .models import User
 
 class ParentViewSet(viewsets.ModelViewSet):
     queryset = Parent.objects.all()
@@ -290,13 +289,13 @@ def password_reset_request(request):
             token = str(uuid.uuid4())
             user.reset_token = token
             user.save()
-            send_mail(
-                'Password Reset Request',
-                f'Use this token to reset your password: {token}',
-                'from@example.com',
-                [email],
-                fail_silently=False,
-            )
+            # send_mail(
+            #     'Password Reset Request',
+            #     f'Use this token to reset your password: {token}',
+            #     'from@example.com',
+            #     [email],
+            #     fail_silently=False,
+            # )
             return Response({'message': 'Password reset token sent to your email'}, status=status.HTTP_200_OK)
         except User.DoesNotExist:
             return Response({'error': 'Email not found'}, status=status.HTTP_404_NOT_FOUND)
