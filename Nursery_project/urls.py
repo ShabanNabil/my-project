@@ -48,12 +48,24 @@ router = DefaultRouter()
 router.register('parents', ParentViewSet)
 router.register('nurseries', NurseryViewSet)
 
+# urlpatterns = [
+#     path('admin/', admin.site.urls),
+#     path('api/', include(router.urls)),
+#     path('login/', login_view, name='login'),  
+#     path('app/', include('App.urls')),
+#     # path('', include('accounts.urls')),
+# ]
+
+from django.http import JsonResponse
+
+def welcome(request):
+    return JsonResponse({"message": "Welcome to Nursery API. Available endpoints: /app/login/, /app/signup/, /app/signup-nursery/"}, status=200)
+
 urlpatterns = [
+    path('', welcome, name='welcome'),  # مسار الـ root
     path('admin/', admin.site.urls),
     path('api/', include(router.urls)),
-    path('login/', login_view, name='login'),  
     path('app/', include('App.urls')),
-    # path('', include('accounts.urls')),
 ]
 
 
