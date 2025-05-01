@@ -804,7 +804,7 @@ MIDDLEWARE = [
     'django.contrib.sessions.middleware.SessionMiddleware',
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.common.CommonMiddleware',
-    # 'django.middleware.csrf.CsrfViewMiddleware',  # Comment this out as we don't need CSRF for API
+    # 'django.middleware.csrf.CsrfViewMiddleware',  # Already commented out, no CSRF for API
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
@@ -938,7 +938,10 @@ SIMPLE_JWT = {
     'JTI_CLAIM': 'jti',
 }
 
-# Security settings to fix Referer issues
+# Security settings to completely disable Referer checks
 SECURE_REFERRER_POLICY = 'no-referrer'
 SECURE_CROSS_ORIGIN_OPENER_POLICY = 'unsafe-none'
 SECURE_CROSS_ORIGIN_EMBEDDER_POLICY = 'unsafe-none'
+# Disable additional security checks that might interfere
+SECURE_BROWSER_XSS_FILTER = False
+SECURE_CONTENT_TYPE_NOSNIFF = False
