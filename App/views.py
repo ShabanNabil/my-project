@@ -493,6 +493,164 @@ from django.shortcuts import render
 #             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 #     return Response({'error': 'Method not allowed'}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
 
+# from rest_framework import viewsets
+# from rest_framework.permissions import IsAuthenticated
+# from rest_framework.views import APIView
+# from rest_framework.decorators import api_view, permission_classes
+# from rest_framework.response import Response
+# from rest_framework import status
+# from django.contrib.auth import authenticate
+# from rest_framework_simplejwt.tokens import RefreshToken
+# from rest_framework.permissions import AllowAny
+# import uuid
+# from django.core.mail import send_mail
+# from .models import Parent, Nursery, User
+# from .serializers import ParentSerializer, NurserySerializer
+# from django.views.decorators.csrf import csrf_exempt
+
+# class ParentViewSet(viewsets.ModelViewSet):
+#     queryset = Parent.objects.all()
+#     serializer_class = ParentSerializer
+#     permission_classes = [IsAuthenticated]
+
+#     def get_queryset(self):
+#         return Parent.objects.filter(user=self.request.user)
+
+# class NurseryViewSet(viewsets.ModelViewSet):
+#     queryset = Nursery.objects.all()
+#     serializer_class = NurserySerializer
+#     permission_classes = [IsAuthenticated]
+
+#     def get_queryset(self):
+#         return Nursery.objects.filter(user=self.request.user)
+
+# @api_view(['POST'])
+# @permission_classes([AllowAny])
+# @csrf_exempt
+# def login_view(request):
+#     if request.method == 'POST':
+#         email = request.data.get('username')
+#         password = request.data.get('password')
+#         try:
+#             user = User.objects.get(email=email)
+#             user = authenticate(request, username=user.username, password=password)
+#         except User.DoesNotExist:
+#             return Response({'error': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
+
+#         if user is not None:
+#             refresh = RefreshToken.for_user(user)
+#             return Response({
+#                 'refresh': str(refresh),
+#                 'access': str(refresh.access_token),
+#                 'message': 'Login successful'
+#             }, status=status.HTTP_200_OK)
+#         return Response({'error': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
+#     return Response({'error': 'Method not allowed'}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
+
+# class SignUpView(APIView):
+#     permission_classes = [AllowAny]
+
+#     @csrf_exempt
+#     def post(self, request):
+#         print("Received data:", request.data)
+#         serializer = ParentSerializer(data=request.data)
+#         if serializer.is_valid():
+#             try:
+#                 parent = serializer.save()
+#                 refresh = RefreshToken.for_user(parent.user)
+#                 return Response({
+#                     'refresh': str(refresh),
+#                     'access': str(refresh.access_token),
+#                     'user_id': parent.user.id,
+#                     'parent_id': parent.id,
+#                     'full_name': parent.full_name,
+#                     'email': parent.user.email,
+#                     'phone_number': parent.phone_number
+#                 }, status=status.HTTP_201_CREATED)
+#             except Exception as e:
+#                 return Response({'error': f'Failed to create parent: {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
+#         print("Serializer errors:", serializer.errors)
+#         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+# class NurserySignUpView(APIView):
+#     permission_classes = [AllowAny]
+
+#     @csrf_exempt
+#     def post(self, request):
+#         print("Received data:", request.data)
+
+#         # إنشاء Parent باستخدام ParentSerializer
+#         parent_data = {
+#             'full_name': request.data.get('full_name', 'Nursery Owner'),
+#             'email': request.data.get('email'),
+#             'phone_number': request.data.get('phone_number'),
+#             'password': request.data.get('password'),
+#             'children_count': 0
+#         }
+#         parent_serializer = ParentSerializer(data=parent_data)
+#         if not parent_serializer.is_valid():
+#             print("Parent serializer errors:", parent_serializer.errors)
+#             return Response(parent_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+#         try:
+#             parent = parent_serializer.save()
+#             user = parent.user
+#         except Exception as e:
+#             return Response({'error': f'Failed to create parent: {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
+
+#         # إنشاء Nursery باستخدام NurserySerializer
+#         nursery_data = {
+#             'user': user.id,
+#             'name': request.data.get('full_name'),
+#             'location': request.data.get('location', 'Unknown'),
+#             'phone': request.data.get('phone_number'),
+#             'capacity': request.data.get('capacity', 20)
+#         }
+#         nursery_serializer = NurserySerializer(data=nursery_data)
+#         if not nursery_serializer.is_valid():
+#             print("Nursery serializer errors:", nursery_serializer.errors)
+#             parent.user.delete()
+#             return Response(nursery_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+#         try:
+#             nursery_serializer.save()
+#         except Exception as e:
+#             parent.user.delete()
+#             return Response({'error': f'Failed to create nursery: {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
+
+#         refresh = RefreshToken.for_user(user)
+#         return Response({
+#             'refresh': str(refresh),
+#             'access': str(refresh.access_token),
+#             'message': 'Nursery registered successfully'
+#         }, status=status.HTTP_201_CREATED)
+
+# @api_view(['POST'])
+# @permission_classes([AllowAny])
+# @csrf_exempt
+# def password_reset_request(request):
+#     if request.method == 'POST':
+#         email = request.data.get('email')
+#         try:
+#             user = User.objects.get(email=email)
+#             token = str(uuid.uuid4())
+#             user.reset_token = token
+#             user.save()
+#             # send_mail(
+#             #     'Password Reset Request',
+#             #     f'Use this token to reset your password: {token}',
+#             #     'from@example.com',
+#             #     [email],
+#             #     fail_silently=False,
+#             # )
+#             return Response({'message': 'Password reset token sent to your email'}, status=status.HTTP_200_OK)
+#         except User.DoesNotExist:
+#             return Response({'error': 'Email not found'}, status=status.HTTP_404_NOT_FOUND)
+#         except Exception as e:
+#             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+#     return Response({'error': 'Method not allowed'}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
+
+
 from rest_framework import viewsets
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
@@ -529,7 +687,7 @@ class NurseryViewSet(viewsets.ModelViewSet):
 @csrf_exempt
 def login_view(request):
     if request.method == 'POST':
-        email = request.data.get('username')
+        email = request.data.get('email')  # تعديل من username لـ email
         password = request.data.get('password')
         try:
             user = User.objects.get(email=email)
@@ -540,8 +698,8 @@ def login_view(request):
         if user is not None:
             refresh = RefreshToken.for_user(user)
             return Response({
-                'refresh': str(refresh),
-                'access': str(refresh.access_token),
+                'token': str(refresh.access_token),  # تعديل ليترجع token
+                'user_id': user.id,  # إضافة user_id
                 'message': 'Login successful'
             }, status=status.HTTP_200_OK)
         return Response({'error': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
@@ -649,3 +807,40 @@ def password_reset_request(request):
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     return Response({'error': 'Method not allowed'}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
+
+class ResetPasswordView(APIView):
+    permission_classes = [AllowAny]
+
+    @csrf_exempt
+    def post(self, request):
+        email = request.data.get('email')
+        new_password = request.data.get('new_password')
+        try:
+            user = User.objects.get(email=email)
+            user.set_password(new_password)
+            user.save()
+            return Response({'message': 'Password reset successful'}, status=status.HTTP_200_OK)
+        except User.DoesNotExist:
+            return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+class ParentResetPasswordView(APIView):
+    permission_classes = [AllowAny]
+
+    @csrf_exempt
+    def post(self, request):
+        email = request.data.get('email')
+        new_password = request.data.get('new_password')
+        try:
+            user = User.objects.get(email=email)
+            parent = Parent.objects.filter(user=user).first()
+            if not parent:
+                return Response({'error': 'Parent not found'}, status=status.HTTP_404_NOT_FOUND)
+            user.set_password(new_password)
+            user.save()
+            return Response({'message': 'Parent password reset successful'}, status=status.HTTP_200_OK)
+        except User.DoesNotExist:
+            return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
