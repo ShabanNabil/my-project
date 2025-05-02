@@ -44,14 +44,27 @@
 #     path('reset-password/parent/', views.ParentResetPasswordView.as_view(), name='reset-password-parent'),
 # ]
 
+# from django.urls import path
+# from . import views
+
+# urlpatterns = [
+#     path('signup/', views.SignUpView.as_view(), name='signup'),  # لتسجيل الـ Parent
+#     path('login/', views.login_parent_view, name='login-parent'),  # لتسجيل دخول الـ Parent
+#     path('signup-nursery/', views.NurserySignUpView.as_view(), name='signup-nursery'),
+#     path('login-nursery/', views.login_nursery_view, name='login-nursery'),  # لتسجيل دخول الـ Nursery
+#     path('register/', views.NurserySignUpView.as_view(), name='register'),  # لتسجيل الـ Nursery
+#     path('reset-password/', views.ResetPasswordView.as_view(), name='reset-password'),
+#     path('reset-password/parent/', views.ParentResetPasswordView.as_view(), name='reset-password-parent'),
+# ]
+
 from django.urls import path
 from . import views
 
 urlpatterns = [
     path('signup/', views.SignUpView.as_view(), name='signup'),  # لتسجيل الـ Parent
-    path('login/', views.login_parent_view, name='login-parent'),  # لتسجيل دخول الـ Parent
+    path('login/', views.login_view, name='login'),  # لتسجيل دخول الـ Parent و Nursery
     path('signup-nursery/', views.NurserySignUpView.as_view(), name='signup-nursery'),
-    path('login-nursery/', views.login_nursery_view, name='login-nursery'),  # لتسجيل دخول الـ Nursery
+    path('login-nursery/', views.login_nursery_view, name='login-nursery'),  # لتسجيل دخول الـ Nursery (اختياري)
     path('register/', views.NurserySignUpView.as_view(), name='register'),  # لتسجيل الـ Nursery
     path('reset-password/', views.ResetPasswordView.as_view(), name='reset-password'),
     path('reset-password/parent/', views.ParentResetPasswordView.as_view(), name='reset-password-parent'),
