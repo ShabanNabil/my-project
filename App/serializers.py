@@ -1,49 +1,141 @@
+# from rest_framework import serializers
+# from .models import User, Nursery, Parent, Child, Visit, Notification
+
+# class UserSerializer(serializers.ModelSerializer):
+#     class Meta:
+#         model = User
+#         fields = ['id', 'name', 'email', 'password', 'created_at', 'is_staff', 'is_active']
+#         extra_kwargs = {'password': {'write_only': True}}
+
+#     def create(self, validated_data):
+#         return User.objects.create_user(
+#             email=validated_data['email'],
+#             name=validated_data['name'],
+#             password=validated_data['password']
+#         )
+
+# class NurserySerializer(serializers.ModelSerializer):
+#     admin = UserSerializer(read_only=True)
+#     admin_id = serializers.PrimaryKeyRelatedField(queryset=User.objects.all(), source='admin', write_only=True)
+
+#     class Meta:
+#         model = Nursery
+#         fields = ['id', 'admin', 'admin_id', 'name', 'address', 'phone', 'description', 'photo', 'longitude', 'latitude', 'status', 'created_at', 'updated_at']
+
+# class ParentSerializer(serializers.ModelSerializer):
+#     admin = UserSerializer(read_only=True)
+#     nursery = NurserySerializer(read_only=True)
+#     admin_id = serializers.PrimaryKeyRelatedField(queryset=User.objects.all(), source='admin', write_only=True)
+#     nursery_id = serializers.PrimaryKeyRelatedField(queryset=Nursery.objects.all(), source='nursery', write_only=True)
+
+#     class Meta:
+#         model = Parent
+#         fields = ['id', 'admin', 'admin_id', 'nursery', 'nursery_id', 'name', 'address', 'phone', 'job', 'created_at']
+
+# class ChildSerializer(serializers.ModelSerializer):
+#     parent = ParentSerializer(read_only=True)
+#     nursery = NurserySerializer(read_only=True)
+#     parent_id = serializers.PrimaryKeyRelatedField(queryset=Parent.objects.all(), source='parent', write_only=True)
+#     nursery_id = serializers.PrimaryKeyRelatedField(queryset=Nursery.objects.all(), source='nursery', write_only=True)
+
+#     class Meta:
+#         model = Child
+#         fields = ['id', 'parent', 'parent_id', 'nursery', 'nursery_id', 'first_name', 'family_name', 'address', 'birth_date', 'gender', 'phone', 'alternative_phone', 'parent_job', 'status', 'created_at', 'updated_at']
+
+# class VisitSerializer(serializers.ModelSerializer):
+#     nursery = NurserySerializer(read_only=True)
+#     parent = ParentSerializer(read_only=True)
+#     nursery_id = serializers.PrimaryKeyRelatedField(queryset=Nursery.objects.all(), source='nursery', write_only=True)
+#     parent_id = serializers.PrimaryKeyRelatedField(queryset=Parent.objects.all(), source='parent', write_only=True)
+
+#     class Meta:
+#         model = Visit
+#         fields = ['id', 'nursery', 'nursery_id', 'parent', 'parent_id', 'visit_date', 'status', 'created_at', 'updated_at']
+
+# class NotificationSerializer(serializers.ModelSerializer):
+#     nursery = NurserySerializer(read_only=True)
+#     parent = ParentSerializer(read_only=True)
+#     nursery_id = serializers.PrimaryKeyRelatedField(queryset=Nursery.objects.all(), source='nursery', allow_null=True, write_only=True)
+#     parent_id = serializers.PrimaryKeyRelatedField(queryset=Parent.objects.all(), source='parent', allow_null=True, write_only=True)
+
+#     class Meta:
+#         model = Notification
+#         fields = ['id', 'nursery', 'nursery_id', 'parent', 'parent_id', 'title', 'message', 'is_read', 'created_at', 'updated_at']
+
+
 from rest_framework import serializers
-from .models import Parent, Nursery, User
+from .models import User, Nursery, Parent, Child, Visit, Notification
 
-class ParentSerializer(serializers.ModelSerializer):
-    email = serializers.EmailField(write_only=True)
-    password = serializers.CharField(write_only=True)
-
+class UserSerializer(serializers.ModelSerializer):
     class Meta:
-        model = Parent
-        fields = ['id', 'full_name', 'email', 'phone_number', 'password', 'children_count']
-        extra_kwargs = {
-            'password': {'write_only': True},
-            'children_count': {'required': False}
-        }
+        model = User
+        fields = ['id', 'name', 'email', 'password', 'is_staff', 'is_active', 'created_at']
+        extra_kwargs = {'password': {'write_only': True}}
 
     def create(self, validated_data):
-        email = validated_data.pop('email')
-        password = validated_data.pop('password')
-        validated_data['children_count'] = validated_data.get('children_count', 0)
-        user = User.objects.create_user(
-            username=email,
-            email=email,
-            password=password,
-            user_type='parent'
+        return User.objects.create_user(
+            email=validated_data['email'],
+            name=validated_data['name'],
+            password=validated_data['password']
         )
-        parent = Parent.objects.create(user=user, **validated_data)
-        parent.email = email
-        parent.save()
-        return parent
 
 class NurserySerializer(serializers.ModelSerializer):
-    email = serializers.EmailField(write_only=True)
-    password = serializers.CharField(write_only=True)
+    admin = UserSerializer(read_only=True)
+    admin_id = serializers.PrimaryKeyRelatedField(queryset=User.objects.all(), source='admin', write_only=True)
 
     class Meta:
         model = Nursery
-        fields = ['id', 'name', 'location', 'phone', 'capacity', 'email', 'password']
+        fields = ['id', 'admin', 'admin_id', 'name', 'address', 'phone', 'description', 
+                  'photo', 'longitude', 'latitude', 'status', 'created_at', 'updated_at']
 
-    def create(self, validated_data):
-        email = validated_data.pop('email')
-        password = validated_data.pop('password')
-        user = User.objects.create_user(
-            username=email,
-            email=email,
-            password=password,
-            user_type='nursery'
-        )
-        nursery = Nursery.objects.create(user=user, **validated_data)
-        return nursery
+class ParentSerializer(serializers.ModelSerializer):
+    admin = UserSerializer(read_only=True)
+    nursery = NurserySerializer(read_only=True)
+    admin_id = serializers.PrimaryKeyRelatedField(queryset=User.objects.all(), source='admin', write_only=True)
+    nursery_id = serializers.PrimaryKeyRelatedField(
+        queryset=Nursery.objects.all(), source='nursery', write_only=True, required=False
+    )
+
+    class Meta:
+        model = Parent
+        fields = ['id', 'admin', 'admin_id', 'nursery', 'nursery_id', 'name', 'address', 
+                  'phone', 'job', 'created_at', 'updated_at']
+
+class ChildSerializer(serializers.ModelSerializer):
+    parent = ParentSerializer(read_only=True)
+    nursery = NurserySerializer(read_only=True)
+    parent_id = serializers.PrimaryKeyRelatedField(queryset=Parent.objects.all(), source='parent', write_only=True)
+    nursery_id = serializers.PrimaryKeyRelatedField(queryset=Nursery.objects.all(), source='nursery', write_only=True)
+
+    class Meta:
+        model = Child
+        fields = ['id', 'parent', 'parent_id', 'nursery', 'nursery_id', 'first_name', 
+                  'family_name', 'address', 'birth_date', 'gender', 'phone', 
+                  'alternative_phone', 'parent_job', 'religion', 'type', 'status', 
+                  'created_at', 'updated_at']
+
+class VisitSerializer(serializers.ModelSerializer):
+    nursery = NurserySerializer(read_only=True)
+    parent = ParentSerializer(read_only=True)
+    nursery_id = serializers.PrimaryKeyRelatedField(queryset=Nursery.objects.all(), source='nursery', write_only=True)
+    parent_id = serializers.PrimaryKeyRelatedField(queryset=Parent.objects.all(), source='parent', write_only=True)
+
+    class Meta:
+        model = Visit
+        fields = ['id', 'nursery', 'nursery_id', 'parent', 'parent_id', 'visit_date', 
+                  'status', 'created_at', 'updated_at']
+
+class NotificationSerializer(serializers.ModelSerializer):
+    nursery = NurserySerializer(read_only=True)
+    parent = ParentSerializer(read_only=True)
+    nursery_id = serializers.PrimaryKeyRelatedField(
+        queryset=Nursery.objects.all(), source='nursery', allow_null=True, write_only=True
+    )
+    parent_id = serializers.PrimaryKeyRelatedField(
+        queryset=Parent.objects.all(), source='parent', allow_null=True, write_only=True
+    )
+
+    class Meta:
+        model = Notification
+        fields = ['id', 'nursery', 'nursery_id', 'parent', 'parent_id', 'title', 
+                  'message', 'is_read', 'created_at', 'updated_at']
