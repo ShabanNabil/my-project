@@ -379,11 +379,8 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # إعدادات أساسية
 SECRET_KEY = config('SECRET_KEY', default='your-very-secure-secret-key-1234567890!@#$%^&*')  # غيّر لمفتاح قوي في .env
 DEBUG = config('DEBUG', default=False, cast=bool)  # False في الإنتاج
-
-# المضيفين المسموح بيهم
-ALLOWED_HOSTS = config('ALLOWED_HOSTS', cast=lambda v: [s.strip() for s in v.split(',')],
-                       default=['localhost', '127.0.0.1', '192.168.124.14', 'nursery-api-zzo0.onrender.com'])
-
+ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1,192.168.124.14,nursery-api-zzo0.onrender.com')
+ALLOWED_HOSTS = [host.strip() for host in ALLOWED_HOSTS.split(',')]
 # التطبيقات المثبتة
 INSTALLED_APPS = [
     'django.contrib.admin',
