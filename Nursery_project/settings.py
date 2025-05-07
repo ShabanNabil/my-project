@@ -363,8 +363,6 @@
 # SECURE_BROWSER_XSS_FILTER = False  # مش لازم
 # SECURE_CONTENT_TYPE_NOSNIFF = False  # مش لازم
 
-
-
 """
 إعدادات Django لمشروع Nursery_project.
 تم إنشاؤه بواسطة 'django-admin startproject' باستخدام Django 5.2.
@@ -373,17 +371,18 @@
 from pathlib import Path
 from datetime import timedelta
 import os
+from decouple import config  # لتحميل متغيرات البيئة
 
 # مسار المشروع
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # إعدادات أساسية
-SECRET_KEY = 'your-very-secure-secret-key-1234567890!@#$%^&*'  # غيّر ده لمفتاح قوي وفريد
-DEBUG = True  # للتطوير المحلي فقط، اجعلها False في الإنتاج
+SECRET_KEY = config('SECRET_KEY', default='your-very-secure-secret-key-1234567890!@#$%^&*')  # غيّر لمفتاح قوي في .env
+DEBUG = config('DEBUG', default=False, cast=bool)  # False في الإنتاج
 
 # المضيفين المسموح بيهم
-ALLOWED_HOSTS = ['localhost', '127.0.0.1', '192.168.124.14']
-# للإنتاج، أضف: ['yourdomain.com', 'nursery-api-zzo0.onrender.com']
+ALLOWED_HOSTS = config('ALLOWED_HOSTS', cast=lambda v: [s.strip() for s in v.split(',')],
+                       default=['localhost', '127.0.0.1', '192.168.124.14', 'nursery-api-zzo0.onrender.com'])
 
 # التطبيقات المثبتة
 INSTALLED_APPS = [
@@ -432,23 +431,13 @@ TEMPLATES = [
 WSGI_APPLICATION = 'Nursery_project.wsgi.application'
 
 # قاعدة البيانات
+# بما إنك بتستخدم SQLite3
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
         'NAME': BASE_DIR / 'db.sqlite3',
     }
 }
-# للإنتاج، استخدم PostgreSQL:
-# DATABASES = {
-#     'default': {
-#         'ENGINE': 'django.db.backends.postgresql',
-#         'NAME': 'your_db_name',
-#         'USER': 'your_db_user',
-#         'PASSWORD': 'your_db_password',
-#         'HOST': 'your_db_host',
-#         'PORT': '5432',
-#     }
-# }
 
 # التحقق من كلمات السر
 AUTH_PASSWORD_VALIDATORS = [
@@ -460,14 +449,13 @@ AUTH_PASSWORD_VALIDATORS = [
 
 # اللغة والتوقيت
 LANGUAGE_CODE = 'en-us'
-TIME_ZONE = 'Africa/Cairo'  # غيّرته لتوقيت مصر
+TIME_ZONE = 'Africa/Cairo'
 USE_I18N = True
 USE_TZ = True
 
 # الملفات الثابتة
 STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
-# أزلت STATICFILES_DIRS لأنك مش محتاج ملفات static دلوقتي
 
 # ملفات الوسائط (لصور الحضانات)
 MEDIA_URL = '/media/'
@@ -484,16 +472,16 @@ CSRF_TRUSTED_ORIGINS = [
     'http://localhost:8000',
     'http://127.0.0.1:8000',
     'http://192.168.124.14:8000',
-    # للإنتاج: 'https://nursery-api-zzo0.onrender.com', 'https://your-frontend.com'
+    'https://nursery-api-zzo0.onrender.com',  # للإنتاج
 ]
-CSRF_COOKIE_SECURE = False  # False للتطوير المحلي
-SESSION_COOKIE_SECURE = False  # False للتطوير المحلي
+CSRF_COOKIE_SECURE = config('CSRF_COOKIE_SECURE', default=False, cast=bool)  # True في الإنتاج
+SESSION_COOKIE_SECURE = config('SESSION_COOKIE_SECURE', default=False, cast=bool)  # True في الإنتاج
 
 # إعدادات CORS
 CORS_ALLOWED_ORIGINS = [
     'http://localhost:3000',
     'http://192.168.124.14:3000',
-    # للإنتاج: 'https://your-frontend.com'
+    # لو عندك نطاق للواجهة الأمامية في الإنتاج، أضفه هنا
 ]
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']
@@ -535,8 +523,8 @@ EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = 'smtp.gmail.com'
 EMAIL_PORT = 587
 EMAIL_USE_TLS = True
-EMAIL_HOST_USER = 'your-email@gmail.com'  # ضع إيميلك
-EMAIL_HOST_PASSWORD = 'your-app-password'  # استخدم App Password من Gmail
+EMAIL_HOST_USER = config('EMAIL_HOST_USER', default='your-email@gmail.com')
+EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='your-app-password')
 DEFAULT_FROM_EMAIL = 'Nursery App <your-email@gmail.com>'
 
 # إعدادات تسجيل الأخطاء
