@@ -197,17 +197,18 @@ from datetime import timedelta
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # إعدادات أساسية بسيطة
-SECRET_KEY = 'simple-key-for-testing'  # مفتاح بسيط للتجربة (غير آمن)
+SECRET_KEY = 'simple-key-for-testing'  # مفتاح بسيط للتجربة
 DEBUG = True  # مفعل للتجربة
-ALLOWED_HOSTS = ['*']  # السماح لجميع المضيفين (غير آمن)
+ALLOWED_HOSTS = ['*']  # السماح لجميع المضيفين
 
-# التطبيقات المثبتة
+# التطبيقات المثبتة (مع إضافة staticfiles)
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
+    'django.contrib.staticfiles',  # أضفنا ده
     'App',
     'rest_framework',
     'rest_framework_simplejwt',
@@ -267,19 +268,23 @@ USE_TZ = True
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
+# ملفات الـ static (أضفناها)
+STATIC_URL = '/static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+
 # نوع المفتاح الأساسي الافتراضي
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # نموذج المستخدم المخصص
 AUTH_USER_MODEL = 'App.User'
 
-# إعدادات CSRF (معدل ليتوافق مع Django 4.0+)
+# إعدادات CSRF
 CSRF_COOKIE_SECURE = False
 SESSION_COOKIE_SECURE = False
-CSRF_TRUSTED_ORIGINS = ['http://*', 'https://*']  # يدعم كل الـ origins مع scheme
+CSRF_TRUSTED_ORIGINS = ['http://*', 'https://*']
 
-# إعدادات CORS (معدل ليتوافق مع corsheaders)
-CORS_ALLOWED_ORIGINS = ['http://*', 'https://*']  # يدعم كل الـ origins مع scheme
+# إعدادات CORS
+CORS_ALLOWED_ORIGINS = ['http://*', 'https://*']
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']
 CORS_ALLOW_HEADERS = [
@@ -290,7 +295,7 @@ CORS_ALLOW_HEADERS = [
     'origin',
 ]
 
-# إعدادات REST Framework (بدون قيود)
+# إعدادات REST Framework
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [],
     'DEFAULT_PERMISSION_CLASSES': [],
@@ -306,7 +311,7 @@ SIMPLE_JWT = {
 }
 
 # إعدادات الإيميل
-EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'  # يطبع الإيميل في الكونسول
+EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 
 # إعدادات تسجيل الأخطاء
 LOGGING = {
