@@ -1,3 +1,5 @@
+
+
 from datetime import timedelta
 from pathlib import Path
 
@@ -10,8 +12,10 @@ DEBUG = True  # مفعل للتطوير، قم بتعطيله (False) في ال�
 ALLOWED_HOSTS = [
     'nursery-api-zzo0.onrender.com',
     'localhost',
+    'http:// 192.168.135.14:8000',
     '127.0.0.1',
-    '36bd-196-134-5-73.ngrok-free.app'  # العنوان الفعلي من ngrok
+    'c016-154-239-247-228.ngrok-free.app',
+    'c507-196-135-64-221.ngrok-free.app'  # الرابط الجديد
 ]
 
 # التطبيقات المثبتة
@@ -97,16 +101,18 @@ CSRF_COOKIE_SECURE = True  # مفعل لأن ngrok يستخدم HTTPS
 SESSION_COOKIE_SECURE = True  # مفعل لأن ngrok يستخدم HTTPS
 CSRF_TRUSTED_ORIGINS = [
     'https://nursery-api-zzo0.onrender.com',
-    'https://36bd-196-134-5-73.ngrok-free.app',  # العنوان الفعلي من ngrok
+    'https://c507-196-135-64-221.ngrok-free.app',  # الرابط الجديد
     'http://localhost:8000',
+    'http://192.168.135.14:8000',
     'http://127.0.0.1:8000'
 ]
 
 # إعدادات CORS
 CORS_ALLOWED_ORIGINS = [
     'https://nursery-api-zzo0.onrender.com',
-    'https://36bd-196-134-5-73.ngrok-free.app',  # العنوان الفعلي من ngrok
+    'https://c507-196-135-64-221.ngrok-free.app',  # الرابط الجديد
     'http://localhost:8000',
+    'http://192.168.135.14:8000',
     'http://127.0.0.1:8000'
 ]
 CORS_ALLOW_CREDENTIALS = True
