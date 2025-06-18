@@ -1,3 +1,15 @@
+# asgiref==3.8.1
+# Django==5.2
+# django-cors-headers==4.4.0
+# djangorestframework==3.15.1
+# djangorestframework-simplejwt==5.5.0
+# PyJWT==2.9.0
+# sqlparse==0.5.1
+# typing-extensions==4.12.2
+# gunicorn==22.0.0
+# python-decouple
+# Pillow
+
 asgiref==3.8.1
 Django==5.2
 django-cors-headers==4.4.0
@@ -7,5 +19,5 @@ PyJWT==2.9.0
 sqlparse==0.5.1
 typing-extensions==4.12.2
 gunicorn==22.0.0
-python-decouple
-Pillow
+python-decouple==3.8
+Pillow==10.4.0
