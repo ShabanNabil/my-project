@@ -346,7 +346,7 @@ SECRET_KEY = 'simple-key-for-testing'  # تغيير هذا في الإنتاج!
 DEBUG = True  # وضع التطوير (تعطيل في الإنتاج)
 ALLOWED_HOSTS = [
     '*',  # للتنمية فقط
-    'me6ahvxsz.localto.net',  # ⬅️ رابط ngrok بدون https://
+    'nursery-api-zzo0.onrender.com',  # ⬅️ رابط ngrok بدون https://
     'localhost',
     '127.0.0.1'
 ]
@@ -431,7 +431,7 @@ AUTH_USER_MODEL = 'App.User'
 # إعدادات CORS
 # CORS_ALLOW_ALL_ORIGINS = True  # للتنمية فقط
 CORS_ALLOWED_ORIGINS = [
-    'https://me6ahvxsz.localto.net',  # ⬅️ رابط ngrok مع https://
+    'https://nursery-api-zzo0.onrender.com',  # ⬅️ رابط ngrok مع https://
     'http://localhost:8000',
     'http://127.0.0.1:8000'
 ]
@@ -443,7 +443,7 @@ CORS_ALLOW_HEADERS = ['*']
 CSRF_COOKIE_SECURE = False  # تعطيل في التنمية
 SESSION_COOKIE_SECURE = False  # تعطيل في التنمية
 CSRF_TRUSTED_ORIGINS = [
-    'https://me6ahvxsz.localto.net',  # ⬅️ رابط ngrok مع https://
+    'https://nursery-api-zzo0.onrender.com',  # ⬅️ رابط ngrok مع https://
     'http://localhost:8000',
     'http://127.0.0.1:8000'
 ]
