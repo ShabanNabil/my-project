@@ -1,3 +1,5 @@
+
+
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.decorators import api_view, permission_classes
@@ -8,30 +10,43 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import authenticate
 from django.core.mail import send_mail
 from .models import User, Nursery, Parent, Child, Notification, NurseryParent
-from .serializers import UserSerializer, NurserySerializer, ParentSerializer, ChildSerializer, NotificationSerializer
+from .serializers import UserSerializer, NurserySerializer, ParentSerializer, ChildSerializer, NotificationSerializer, NurseryParentSerializer
 import uuid
+from django.views.decorators.csrf import csrf_exempt
 from django.db.utils import IntegrityError
 from django.db import transaction, models
 from django.contrib.auth.hashers import check_password
 from rest_framework.decorators import action
+from django.db.models import Q
 
-# دالة مساعدة لإنشاء الإشعارات
 def create_notification(recipient, title, message, is_nursery=False):
     kwargs = {'is_read': False, 'title': title, 'message': message}
     if is_nursery:
         kwargs['nursery'] = recipient
+    elif hasattr(recipient, 'user_type') and recipient.user_type == 'admin':
+        kwargs['user'] = recipient  # للأدمنز
     else:
-        kwargs['parent'] = recipient
+        kwargs['parent'] = recipient  # للوالدين
     Notification.objects.create(**kwargs)
 
+class NotificationListView(APIView):
+    permission_classes = [IsAuthenticated]
 
+    def get(self, request):
+        # جلب الإشعارات المرتبطة بالـ User الحالي (حضانة)
+        user = request.user
+        notifications = Notification.objects.filter(nursery__admin_id=user).order_by('-id')  # الأحدث أولاً
+        serializer = NotificationSerializer(notifications, many=True)
+        return Response(serializer.data)
+
+# ============ تمام شغال =====================================
 class ParentSignUpView(APIView):
     permission_classes = [AllowAny]
 
     @transaction.atomic
     def post(self, request):
         user_data = {
-            'father_mother_name': request.data.get('father_mother_name'),
+            'full_name': request.data.get('full_name'),
             'email': request.data.get('email'),
             'password': request.data.get('password'),
             'user_type': 'parent'
@@ -51,29 +66,28 @@ class ParentSignUpView(APIView):
                     'code': 'DUPLICATE_EMAIL'
                 }, status=status.HTTP_400_BAD_REQUEST)
 
-            user = user_serializer.save()  # حفظ المستخدم أولاً
+            user = user_serializer.save()
             parent_data = {
-                'admin_id': user,  # ربط الكائن User مباشرة
-                'father_mother_name': user_data['father_mother_name'],
+                'admin_id': user,
+                'full_name': request.data.get('full_name', ''),
                 'address': request.data.get('address', 'Unknown'),
-                'phone': request.data.get('phone', ''),
+                'phone_number': request.data.get('phone_number', ''),
                 'job': request.data.get('job', '')
             }
-            if not parent_data['phone']:
+            if not parent_data['phone_number']:
                 user.delete()
                 return Response({
                     'error': 'Phone number is required',
                     'code': 'MISSING_PHONE'
                 }, status=status.HTTP_400_BAD_REQUEST)
-
-            if Parent.objects.filter(phone=parent_data['phone']).exists():
+            if Parent.objects.filter(phone_number=parent_data['phone_number']).exists():
                 user.delete()
                 return Response({
                     'error': 'Phone number already exists',
                     'code': 'DUPLICATE_PHONE'
                 }, status=status.HTTP_400_BAD_REQUEST)
 
-            parent = Parent.objects.create(**parent_data)  # حفظ الـ Parent
+            parent = Parent.objects.create(**parent_data)
 
             refresh = RefreshToken.for_user(user)
             response_data = {
@@ -100,55 +114,12 @@ class ParentSignUpView(APIView):
                 'error': f'Failed to create parent: {str(e)}',
                 'code': 'SERVER_ERROR'
             }, status=status.HTTP_400_BAD_REQUEST)
-        
+#  ==================================================================
+# ==================================تماممممممممم=========================
+import logging
 
-# @api_view(['POST'])
-# @permission_classes([AllowAny])
-# def parent_login(request):
-#     email = request.data.get('email')
-#     password = request.data.get('password')
-
-#     if not email or not password:
-#         return Response({
-#             'error': 'Email and password are required',
-#             'code': 'MISSING_CREDENTIALS'
-#         }, status=status.HTTP_400_BAD_REQUEST)
-
-#     try:
-#         # البحث عن المستخدم بناءً على الـ email
-#         try:
-#             user = User.objects.get(email=email, user_type='parent')
-#         except User.DoesNotExist:
-#             return Response({
-#                 'error': 'Invalid credentials or not a parent',
-#                 'code': 'INVALID_CREDENTIALS'
-#             }, status=status.HTTP_401_UNAUTHORIZED)
-
-#         # التحقق باستخدام الـ username المحفوظ
-#         user = authenticate(request, username=user.username, password=password)
-#         if user is None:
-#             return Response({
-#                 'error': 'Invalid credentials. Check password or username.',
-#                 'code': 'INVALID_CREDENTIALS',
-#                 'debug': {'username_used': user.username}  # للتحقق
-#             }, status=status.HTTP_401_UNAUTHORIZED)
-
-#         # إنشاء التوكن
-#         refresh = RefreshToken.for_user(user)
-#         response_data = {
-#             'success': True,
-#             'token': str(refresh.access_token),
-#             'user_id': user.id,
-#             'user_type': 'parent',
-#             'message': 'Login successful for parent'
-#         }
-#         return Response(response_data, status=status.HTTP_200_OK)
-#     except Exception as e:
-#         return Response({
-#             'error': f'Failed to login: {str(e)}',
-#             'code': 'SERVER_ERROR'
-#         }, status=status.HTTP_400_BAD_REQUEST)
-
+logger = logging.getLogger(__name__)
+@csrf_exempt
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def parent_login(request):
@@ -161,15 +132,19 @@ def parent_login(request):
             'code': 'MISSING_CREDENTIALS'
         }, status=status.HTTP_400_BAD_REQUEST)
 
+    logger.info(f"Login attempt for email: {email}")  # Add logging
+
     try:
-        user = User.objects.get(email=email, user_type='parent')
-        if not check_password(password, user.password):  # تحقق مباشر
+        user = authenticate(request, email=email, password=password)
+        if user is None:
+            logger.warning(f"Authentication failed for email: {email}")
             return Response({
                 'error': 'Invalid credentials',
                 'code': 'INVALID_CREDENTIALS'
             }, status=status.HTTP_401_UNAUTHORIZED)
 
         refresh = RefreshToken.for_user(user)
+        logger.info(f"Login successful for email: {email}")
         return Response({
             'success': True,
             'token': str(refresh.access_token),
@@ -178,16 +153,18 @@ def parent_login(request):
             'message': 'Login successful for parent'
         }, status=status.HTTP_200_OK)
     except User.DoesNotExist:
+        logger.error(f"User not found for email: {email}")
         return Response({
             'error': 'Invalid credentials or not a parent',
             'code': 'INVALID_CREDENTIALS'
         }, status=status.HTTP_401_UNAUTHORIZED)
+
+# شغال تمام ===========================================================
 class NurserySignUpView(APIView):
     permission_classes = [AllowAny]
-
+    @csrf_exempt
     @transaction.atomic
     def post(self, request):
-        # استخراج البيانات من الـ request
         full_name = request.data.get('full_name')
         if not full_name:
             return Response({
@@ -196,7 +173,7 @@ class NurserySignUpView(APIView):
             }, status=status.HTTP_400_BAD_REQUEST)
 
         user_data = {
-            'father_mother_name': full_name,
+            'full_name': full_name,
             'email': request.data.get('email'),
             'password': request.data.get('password'),
             'user_type': 'nursery',
@@ -215,21 +192,21 @@ class NurserySignUpView(APIView):
             nursery_data = {
                 'admin_id': user.id,
                 'name': full_name,
-                'phone': user_data.get('phone_number'),
+                'phone_number': user_data.get('phone_number'),
                 'address': request.data.get('location', 'Unknown'),
                 'description': request.data.get('description', ''),
                 'longitude': request.data.get('longitude', 0.0),
                 'latitude': request.data.get('latitude', 0.0),
-                'status': 'pending',
                 'image': request.data.get('image', None)
+                # نزلنا status = 'pending'
             }
-            if not nursery_data['phone']:
+            if not nursery_data['phone_number']:
                 user.delete()
                 return Response({
                     'error': 'Phone number is required',
                     'code': 'MISSING_PHONE'
                 }, status=status.HTTP_400_BAD_REQUEST)
-            if Nursery.objects.filter(phone=nursery_data['phone']).exists():
+            if Nursery.objects.filter(phone_number=nursery_data['phone_number']).exists():
                 user.delete()
                 return Response({
                     'error': 'Phone number already exists',
@@ -246,23 +223,16 @@ class NurserySignUpView(APIView):
                 }, status=status.HTTP_400_BAD_REQUEST)
 
             nursery = nursery_serializer.save()
-            user.nursery_request = f"New nursery registration for {nursery.name}"
-            user.request_status = 'pending'
             user.save()
-            create_notification(
-                nursery,
-                title="New Nursery Request",
-                message=f"A new nursery {nursery.name} has submitted a request.",
-                is_nursery=True
-            )
             refresh = RefreshToken.for_user(user)
             response_data = {
                 'success': True,
                 'token': str(refresh.access_token),
                 'user_id': user.id,
-                'nursery_id': nursery.admin_id.id,  # نستخدم admin_id.id
-                'nursery_status': nursery.status,
-                'user_type': 'nursery'
+                'nursery_id': nursery.admin_id.id,
+                'nursery_status': 'active',  # بدل pending
+                'user_type': 'nursery',
+                'redirect': '/nursery-information/'  # تحويلة لصفحة التسجيل
             }
             return Response(response_data, status=status.HTTP_201_CREATED)
         except IntegrityError as e:
@@ -282,50 +252,10 @@ class NurserySignUpView(APIView):
                 'error': f'Failed to create nursery: {str(e)}',
                 'code': 'SERVER_ERROR'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-# @api_view(['POST'])
-# @permission_classes([AllowAny])
-# def nursery_login(request):
-#     email = request.data.get('email')
-#     password = request.data.get('password')
+# ==================================================================
 
-#     if not email or not password:
-#         return Response({
-#             'error': 'Email and password are required',
-#             'code': 'MISSING_CREDENTIALS'
-#         }, status=status.HTTP_400_BAD_REQUEST)
-
-#     try:
-#         user = User.objects.get(email=email, user_type='nursery')
-#         nursery = Nursery.objects.get(admin_id=user)
-#         if nursery.status != 'accepted':
-#             return Response({
-#                 'error': 'Nursery is not accepted',
-#                 'code': 'NURSERY_NOT_ACCEPTED'
-#             }, status=status.HTTP_403_FORBIDDEN)
-
-#         user = authenticate(request, username=email, password=password)
-#         if user is None:
-#             return Response({
-#                 'error': 'Invalid credentials',
-#                 'code': 'INVALID_CREDENTIALS'
-#             }, status=status.HTTP_401_UNAUTHORIZED)
-
-#         refresh = RefreshToken.for_user(user)
-#         response_data = {
-#             'success': True,
-#             'token': str(refresh.access_token),
-#             'user_id': user.id,
-#             'nursery_id': nursery.admin_id.id,
-#             'nursery_status': nursery.status,
-#             'user_type': 'nursery',
-#             'message': 'Login successful for nursery'
-#         }
-#         return Response(response_data, status=status.HTTP_200_OK)
-#     except (User.DoesNotExist, Nursery.DoesNotExist):
-#         return Response({
-#             'error': 'Invalid credentials or not a nursery',
-#             'code': 'INVALID_CREDENTIALS'
-#         }, status=status.HTTP_401_UNAUTHORIZED)
+# ===================== شغال تمام ======================================
+@csrf_exempt
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def nursery_login(request):
@@ -341,12 +271,6 @@ def nursery_login(request):
     try:
         user = User.objects.get(email=email, user_type='nursery')
         nursery = Nursery.objects.get(admin_id=user)
-        if nursery.status != 'accepted':
-            return Response({
-                'error': 'Nursery is not accepted',
-                'code': 'NURSERY_NOT_ACCEPTED'
-            }, status=status.HTTP_403_FORBIDDEN)
-
         if not check_password(password, user.password):
             return Response({
                 'error': 'Invalid credentials',
@@ -354,24 +278,31 @@ def nursery_login(request):
             }, status=status.HTTP_401_UNAUTHORIZED)
 
         refresh = RefreshToken.for_user(user)
-        return Response({
+        redirect_url = '/nursery-information/' if nursery.status == 'pending' else None
+        response_data = {
             'success': True,
             'token': str(refresh.access_token),
             'user_id': user.id,
             'nursery_id': nursery.admin_id.id,
             'nursery_status': nursery.status,
             'user_type': 'nursery',
-            'message': 'Login successful for nursery'
-        }, status=status.HTTP_200_OK)
+            'message': 'Login successful for nursery',
+            'redirect': redirect_url
+        }
+        return Response(response_data, status=status.HTTP_200_OK)
     except (User.DoesNotExist, Nursery.DoesNotExist):
         return Response({
             'error': 'Invalid credentials or not a nursery',
             'code': 'INVALID_CREDENTIALS'
         }, status=status.HTTP_401_UNAUTHORIZED)
-# تسجيل دخول (Admin)
+# =================================================================
+
+logger = logging.getLogger(__name__)
+@csrf_exempt
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def admin_login(request):
+    logger.info(f"Received admin login request: {request.data}")
     email = request.data.get('email')
     password = request.data.get('password')
 
@@ -382,18 +313,23 @@ def admin_login(request):
         }, status=status.HTTP_400_BAD_REQUEST)
 
     try:
-        user = User.objects.get(email=email, user_type='admin')
-        if not (user.is_staff and user.is_superuser):
-            return Response({
-                'error': 'User is not an admin',
-                'code': 'NOT_ADMIN'
-            }, status=status.HTTP_400_BAD_REQUEST)
-        user = authenticate(request, username=email, password=password)
+        # التحقق من الـ authentication أولاً
+        user = authenticate(request, email=email, password=password)
         if user is None:
+            logger.error(f"Authentication failed for email {email}")
             return Response({
                 'error': 'Invalid credentials',
                 'code': 'INVALID_CREDENTIALS'
             }, status=status.HTTP_401_UNAUTHORIZED)
+
+        # التحقق من إن المستخدم admin
+        if not (user.is_staff and user.is_superuser and user.user_type == 'admin'):
+            logger.error(f"User {email} lacks admin privileges: is_staff={user.is_staff}, is_superuser={user.is_superuser}, user_type={user.user_type}")
+            return Response({
+                'error': 'User is not an admin',
+                'code': 'NOT_ADMIN'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
         refresh = RefreshToken.for_user(user)
         response_data = {
             'success': True,
@@ -407,41 +343,25 @@ def admin_login(request):
             'request_created_at': user.request_created_at
         }
         return Response(response_data, status=status.HTTP_200_OK)
-    except User.DoesNotExist:
+    except Exception as e:
+        logger.error(f"Admin login error for email {email}: {str(e)}")
         return Response({
             'error': 'Invalid credentials or not an admin',
             'code': 'INVALID_CREDENTIALS'
         }, status=status.HTTP_401_UNAUTHORIZED)
-
+# ======================================================================
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def get_nurseries(request):
+    query = request.query_params.get('q', '')
     nurseries = Nursery.objects.filter(status='accepted')
+    if query:
+        nurseries = nurseries.filter(
+            Q(name__icontains=query) | Q(address__icontains=query)
+        )
     serializer = NurserySerializer(nurseries, many=True)
     return Response(serializer.data, status=status.HTTP_200_OK)
 
-@api_view(['POST'])
-@permission_classes([AllowAny])
-def password_reset_request(request):
-    email = request.data.get('email')
-    try:
-        user = User.objects.get(email=email)
-        token = str(uuid.uuid4())
-        user.reset_token = token
-        user.save()
-        reset_link = f"https://your-frontend.com/reset-password?token={token}"
-        send_mail(
-            'Password Reset Request',
-            f'Click this link to reset your password: {reset_link}',
-            'from@yourdomain.com',
-            [email],
-            fail_silently=False,
-        )
-        return Response({'message': 'Password reset link sent to your email'}, status=status.HTTP_200_OK)
-    except User.DoesNotExist:
-        return Response({'error': 'Email not found', 'code': 'EMAIL_NOT_FOUND'}, status=status.HTTP_404_NOT_FOUND)
-    except Exception as e:
-        return Response({'error': str(e), 'code': 'SERVER_ERROR'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class ResetPasswordView(APIView):
     permission_classes = [AllowAny]
@@ -490,13 +410,8 @@ class ParentViewSet(ModelViewSet):
     def update_status(self, request, pk=None):
         parent = self.get_object()
         status = request.data.get('status')
-        if status not in ['pending', 'accepted', 'rejected']:
+        if status not in ['accepted', 'rejected']:  # نزلنا pending
             return Response({'error': 'Invalid status', 'code': 'INVALID_STATUS'}, status=status.HTTP_400_BAD_REQUEST)
-
-        admin_user = User.objects.get(user_type='admin')
-        admin_user.parent_request = f"Request for {parent.father_mother_name}"
-        admin_user.request_status = status
-        admin_user.save()
 
         create_notification(
             parent,
@@ -507,12 +422,11 @@ class ParentViewSet(ModelViewSet):
         return Response({'success': True, 'message': f'Parent status updated to {status}'}, status=status.HTTP_200_OK)
 
     def destroy(self, request, *args, **kwargs):
-        if not (request.user.is_staff and request.user.is_superuser):
+        if not (request.user.is_staff and request.user.is_superuser):  # تعديل هنا
             return Response({'error': 'Only admins can delete parents', 'code': 'NOT_ADMIN'}, status=status.HTTP_403_FORBIDDEN)
         instance = self.get_object()
         self.perform_destroy(instance)
         return Response({'success': True, 'message': 'Parent deleted successfully'}, status=status.HTTP_204_NO_CONTENT)
-
 class NurseryViewSet(ModelViewSet):
     queryset = Nursery.objects.all()
     serializer_class = NurserySerializer
@@ -536,16 +450,11 @@ class NurseryAdminViewSet(ModelViewSet):
     def update_status(self, request, pk=None):
         nursery = self.get_object()
         status = request.data.get('status')
-        if status not in ['pending', 'accepted', 'rejected']:
+        if status not in ['accepted', 'rejected']:  # نزلنا pending
             return Response({'error': 'Invalid status', 'code': 'INVALID_STATUS'}, status=status.HTTP_400_BAD_REQUEST)
 
         nursery.status = status
         nursery.save()
-
-        admin_user = User.objects.get(user_type='admin')
-        admin_user.nursery_request = f"Request for {nursery.name}"
-        admin_user.request_status = status
-        admin_user.save()
 
         create_notification(
             nursery,
@@ -555,6 +464,39 @@ class NurseryAdminViewSet(ModelViewSet):
         )
 
         return Response({'success': True, 'message': f'Nursery status updated to {status}'}, status=status.HTTP_200_OK)
+    
+
+class AdminDashboardView(APIView):
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    def get(self, request):
+        nurseries = Nursery.objects.filter(status='pending')
+        serializer = NurserySerializer(nurseries, many=True)
+        return Response({
+            'pending_nurseries': serializer.data
+        }, status=status.HTTP_200_OK)
+
+    def post(self, request, nursery_id):
+        try:
+            # استخدام admin_id بدل id لأن ده الـ primary key بتاع Nursery
+            nursery = Nursery.objects.get(admin_id=nursery_id)
+            status = request.data.get('status')
+            if status not in ['accepted', 'rejected']:
+                return Response({'error': 'Invalid status', 'code': 'INVALID_STATUS'}, status=status.HTTP_400_BAD_REQUEST)
+
+            nursery.status = status
+            nursery.save()
+            create_notification(
+                nursery,
+                title=f"Nursery {status.capitalize()}",
+                message=f"Your nursery {nursery.name} has been {status} by the admin.",
+                is_nursery=True
+            )
+            return Response({'success': True, 'message': f'Nursery status updated to {status}'}, status=status.HTTP_200_OK)
+        except Nursery.DoesNotExist:
+            return Response({'error': 'Nursery not found', 'code': 'NOT_FOUND'}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({'error': str(e), 'code': 'SERVER_ERROR'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class ChildViewSet(ModelViewSet):
     queryset = Child.objects.all()
@@ -571,7 +513,7 @@ class ChildViewSet(ModelViewSet):
     def update_status(self, request, pk=None):
         child = self.get_object()
         status = request.data.get('status')
-        if status not in ['pending', 'accepted', 'rejected']:
+        if status not in ['accepted', 'rejected']:  # نزلنا pending
             return Response({'error': 'Invalid status', 'code': 'INVALID_STATUS'}, status=status.HTTP_400_BAD_REQUEST)
 
         child.status = status
@@ -606,138 +548,134 @@ class NotificationViewSet(ModelViewSet):
         notification.save()
         return Response({'success': True, 'message': 'Notification marked as read'}, status=status.HTTP_200_OK)
 
-class AdminDashboardView(APIView):
-    permission_classes = [IsAuthenticated, IsAdminUser]
 
-    def get(self, request):
-        admin_user = request.user
-        users_with_requests = User.objects.filter(
-            models.Q(nursery_request__isnull=False, nursery_request__ne='') | 
-            models.Q(parent_request__isnull=False, parent_request__ne='')
-        ).exclude(user_type='admin')
+# class NurseryDashboardView(APIView):
+#     permission_classes = [IsAuthenticated]
 
-        pending_parents = [user for user in users_with_requests if user.user_type == 'parent' and user.request_status == 'pending']
-        accepted_parents = [user for user in users_with_requests if user.user_type == 'parent' and user.request_status == 'accepted']
-        rejected_parents = [user for user in users_with_requests if user.user_type == 'parent' and user.request_status == 'rejected']
+#     def get(self, request, nursery_id: int):
+#         try:
+#             nursery = Nursery.objects.get(admin_id=nursery_id)
+#             if nursery.admin != request.user and not request.user.is_superuser:
+#                 return Response({'message': 'Unauthorized', 'code': 'UNAUTHORIZED'}, status=status.HTTP_403_FORBIDDEN)
 
-        pending_parent_serializer = ParentSerializer([Parent.objects.get(admin=user) for user in pending_parents], many=True)
-        accepted_parent_serializer = ParentSerializer([Parent.objects.get(admin=user) for user in accepted_parents], many=True)
-        rejected_parent_serializer = ParentSerializer([Parent.objects.get(admin=user) for user in rejected_parents], many=True)
+#             status_filter = request.query_params.get('status', None)
+#             requests = NurseryParent.objects.filter(nursery=nursery)
+#             if status_filter:
+#                 requests = requests.filter(status=status_filter)
 
-        pending_nurseries = [user for user in users_with_requests if user.user_type == 'nursery' and user.request_status == 'pending']
-        accepted_nurseries = [user for user in users_with_requests if user.user_type == 'nursery' and user.request_status == 'accepted']
-        rejected_nurseries = [user for user in users_with_requests if user.user_type == 'nursery' and user.request_status == 'rejected']
+#             if not requests.exists():
+#                 return Response({
+#                     'nursery': NurserySerializer(nursery).data,
+#                     'requests': [],
+#                     'message': 'No requests found'
+#                 }, status=status.HTTP_200_OK)
 
-        pending_nursery_serializer = NurserySerializer([Nursery.objects.get(admin=user) for user in pending_nurseries], many=True)
-        accepted_nursery_serializer = NurserySerializer([Nursery.objects.get(admin=user) for user in accepted_nurseries], many=True)
-        rejected_nursery_serializer = NurserySerializer([Nursery.objects.get(admin=user) for user in rejected_nurseries], many=True)
+#             serializer = NurseryParentSerializer(requests, many=True)
+#             return Response({
+#                 'nursery': NurserySerializer(nursery).data,
+#                 'requests': serializer.data
+#             }, status=status.HTTP_200_OK)
+#         except Nursery.DoesNotExist:
+#             return Response({'message': 'Nursery not found or you do not have access', 'code': 'NOT_FOUND'}, status=status.HTTP_404_NOT_FOUND)
 
-        return Response({
-            'pending_parents': pending_parent_serializer.data,
-            'accepted_parents': accepted_parent_serializer.data,
-            'rejected_parents': rejected_parent_serializer.data,
-            'pending_nurseries': pending_nursery_serializer.data,
-            'accepted_nurseries': accepted_nursery_serializer.data,
-            'rejected_nurseries': rejected_nursery_serializer.data
-        }, status=status.HTTP_200_OK)
+#     def post(self, request, nursery_id: int):
+#         try:
+#             nursery = Nursery.objects.get(admin_id=nursery_id)
+#             if nursery.admin != request.user and not request.user.is_superuser:
+#                 return Response({'message': 'Unauthorized', 'code': 'UNAUTHORIZED'}, status=status.HTTP_403_FORBIDDEN)
+
+#             parent_id = request.data.get('parent_id')
+#             action = request.data.get('action')
+
+#             if not parent_id or not action:
+#                 return Response({'message': 'Missing parent_id or action', 'code': 'MISSING_DATA'}, status=status.HTTP_400_BAD_REQUEST)
+
+#             parent = Parent.objects.get(id=parent_id)
+#             request_obj = NurseryParent.objects.get(nursery=nursery, parent=parent)
+
+#             if action not in ['accept', 'reject']:
+#                 return Response({'message': 'Invalid action', 'code': 'INVALID_ACTION'}, status=status.HTTP_400_BAD_REQUEST)
+
+#             if action == 'accept':
+#                 request_obj.status = 'accepted'
+#                 message = f"Your request to join {nursery.name} for child {request_obj.child.child_name} has been accepted."
+#             elif action == 'reject':
+#                 request_obj.status = 'rejected'
+#                 message = f"Your request to join {nursery.name} for child {request_obj.child.child_name} has been rejected."
+
+#             request_obj.save()
+#             create_notification(
+#                 parent,
+#                 title=f"Join Request {action.capitalize()}",
+#                 message=message
+#             )
+#             return Response({'message': f'Parent request {action}ed', 'request_status': request_obj.status}, status=status.HTTP_200_OK)
+#         except (Nursery.DoesNotExist, Parent.DoesNotExist, NurseryParent.DoesNotExist):
+#             return Response({'message': 'Nursery, Parent, or Request not found', 'code': 'NOT_FOUND'}, status=status.HTTP_404_NOT_FOUND)
 
 class NurseryDashboardView(APIView):
     permission_classes = [IsAuthenticated]
 
-    def get(self, request, nursery_id):
+    def get(self, request, nursery_id: int):
         try:
-            nursery = Nursery.objects.get(id=nursery_id, admin=request.user)
-            pending_requests = NurseryParent.objects.filter(nursery=nursery, status='pending')
-            accepted_requests = NurseryParent.objects.filter(nursery=nursery, status='accepted')
-            rejected_requests = NurseryParent.objects.filter(nursery=nursery, status='rejected')
+            nursery = Nursery.objects.get(admin_id=nursery_id)
+            if nursery.admin_id != request.user and not request.user.is_superuser:
+                return Response({'message': 'Unauthorized', 'code': 'UNAUTHORIZED'}, status=status.HTTP_403_FORBIDDEN)
 
-            pending_parents = [req.parent for req in pending_requests]
-            accepted_parents = [req.parent for req in accepted_requests]
-            rejected_parents = [req.parent for req in rejected_requests]
+            status_filter = request.query_params.get('status', None)
+            requests = NurseryParent.objects.filter(nursery=nursery)
+            if status_filter:
+                requests = requests.filter(status=status_filter)
 
-            pending_serializer = ParentSerializer(pending_parents, many=True)
-            accepted_serializer = ParentSerializer(accepted_parents, many=True)
-            rejected_serializer = ParentSerializer(rejected_parents, many=True)
+            if not requests.exists():
+                return Response({
+                    'nursery': NurserySerializer(nursery).data,
+                    'requests': [],
+                    'message': 'No requests found'
+                }, status=status.HTTP_200_OK)
 
+            serializer = NurseryParentSerializer(requests, many=True)
             return Response({
                 'nursery': NurserySerializer(nursery).data,
-                'pending_parents': pending_serializer.data,
-                'accepted_parents': accepted_serializer.data,
-                'rejected_parents': rejected_serializer.data
+                'requests': serializer.data
             }, status=status.HTTP_200_OK)
         except Nursery.DoesNotExist:
-            return Response({'message': 'Nursery not found or you do not have access'}, status=status.HTTP_404_NOT_FOUND)
+            return Response({'message': 'Nursery not found or you do not have access', 'code': 'NOT_FOUND'}, status=status.HTTP_404_NOT_FOUND)
 
-    def post(self, request, nursery_id):
-        parent_id = request.data.get('parent_id')
-        action = request.data.get('action')  # 'accept' or 'reject'
-
+    def post(self, request, nursery_id: int):
         try:
-            nursery = Nursery.objects.get(id=nursery_id, admin=request.user)
+            nursery = Nursery.objects.get(admin_id=nursery_id)
+            if nursery.admin_id != request.user and not request.user.is_superuser:
+                return Response({'message': 'Unauthorized', 'code': 'UNAUTHORIZED'}, status=status.HTTP_403_FORBIDDEN)
+
+            parent_id = request.data.get('parent_id')
+            action = request.data.get('action')
+
+            if not parent_id or not action:
+                return Response({'message': 'Missing parent_id or action', 'code': 'MISSING_DATA'}, status=status.HTTP_400_BAD_REQUEST)
+
             parent = Parent.objects.get(id=parent_id)
             request_obj = NurseryParent.objects.get(nursery=nursery, parent=parent)
 
-            if action == 'accept':
-                request_obj.status = 'accepted'
-                request_obj.save()
-                message = f"Your request to join {nursery.name} has been accepted."
-            elif action == 'reject':
-                request_obj.status = 'rejected'
-                request_obj.save()
-                message = f"Your request to join {nursery.name} has been rejected."
-            else:
+            if action not in ['accept', 'reject']:
                 return Response({'message': 'Invalid action', 'code': 'INVALID_ACTION'}, status=status.HTTP_400_BAD_REQUEST)
 
+            if action == 'accept':
+                request_obj.status = 'accepted'
+                message = f"Your request to join {nursery.name} for child {request_obj.child.child_name} has been accepted."
+            elif action == 'reject':
+                request_obj.status = 'rejected'
+                message = f"Your request to join {nursery.name} for child {request_obj.child.child_name} has been rejected."
+
+            request_obj.save()
             create_notification(
                 parent,
                 title=f"Join Request {action.capitalize()}",
                 message=message
             )
-
-            return Response({'message': f'Parent request {action}ed'}, status=status.HTTP_200_OK)
+            return Response({'message': f'Parent request {action}ed', 'request_status': request_obj.status}, status=status.HTTP_200_OK)
         except (Nursery.DoesNotExist, Parent.DoesNotExist, NurseryParent.DoesNotExist):
             return Response({'message': 'Nursery, Parent, or Request not found', 'code': 'NOT_FOUND'}, status=status.HTTP_404_NOT_FOUND)
-
-@api_view(['POST'])
-@permission_classes([IsAuthenticated])
-def request_nursery_join(request):
-    if request.user.user_type != 'parent':
-        return Response({
-            'error': 'Only parents can request to join a nursery',
-            'code': 'NOT_PARENT'
-        }, status=status.HTTP_403_FORBIDDEN)
-
-    nursery_id = request.data.get('nursery_id')
-    try:
-        nursery = Nursery.objects.get(id=nursery_id, status='accepted')
-        parent = Parent.objects.get(admin=request.user)
-
-        if NurseryParent.objects.filter(nursery=nursery, parent=parent).exists():
-            return Response({
-                'error': 'Request already sent',
-                'code': 'DUPLICATE_REQUEST'
-            }, status=status.HTTP_400_BAD_REQUEST)
-
-        NurseryParent.objects.create(nursery=nursery, parent=parent, status='pending')
-
-        create_notification(
-            nursery,
-            title="New Parent Join Request",
-            message=f"Parent {parent.father_mother_name} has requested to join your nursery.",
-            is_nursery=True
-        )
-
-        return Response({'success': True, 'message': 'Join request sent to nursery'}, status=status.HTTP_201_CREATED)
-    except Nursery.DoesNotExist:
-        return Response({
-            'error': 'Nursery not found or not accepted',
-            'code': 'NURSERY_NOT_FOUND'
-        }, status=status.HTTP_404_NOT_FOUND)
-    except Parent.DoesNotExist:
-        return Response({
-            'error': 'Parent not found',
-            'code': 'PARENT_NOT_FOUND'
-        }, status=status.HTTP_404_NOT_FOUND)
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
@@ -753,29 +691,146 @@ def get_child_profile(request):
             'code': 'PARENT_NOT_FOUND'
         }, status=status.HTTP_404_NOT_FOUND)
 
+# @api_view(['POST'])
+# @permission_classes([IsAuthenticated])
+# def add_child(request):
+#     if request.user.user_type != 'parent':
+#         return Response({'error': 'Only parents can add children', 'code': 'NOT_PARENT'}, status=status.HTTP_403_FORBIDDEN)
+    
+#     parent = Parent.objects.get(admin_=request.user)
+#     child_data = {
+#         'parent': parent.id,
+#         'child_name': request.data.get('child_name'),
+#         'date_of_birth': request.data.get('date_of_birth'),
+#         'father_mother_name': request.data.get('father_mother_name'),
+#         'job': request.data.get('job', ''),
+#         'address': request.data.get('address', 'Unknown'),
+#         'phone_number': request.data.get('phone_number', ''),
+#         'another_phone_number': request.data.get('another_phone_number', ''),
+#         'gender': request.data.get('gender', '')
+#     }
+#     required_fields = ['child_name', 'date_of_birth', 'father_mother_name', 'phone_number']
+#     missing_fields = [field for field in required_fields if not child_data[field]]
+#     if missing_fields:
+#         return Response({
+#             'error': f'Missing required fields: {", ".join(missing_fields)}',
+#             'code': 'MISSING_FIELDS'
+#         }, status=status.HTTP_400_BAD_REQUEST)
+    
+#     if child_data['gender'] and child_data['gender'] not in ['male', 'female']:
+#         return Response({
+#             'error': 'Gender must be "male" or "female"',
+#             'code': 'INVALID_GENDER'
+#         }, status=status.HTTP_400_BAD_REQUEST)
+
+#     serializer = ChildSerializer(data=child_data)
+#     if serializer.is_valid():
+#         child = serializer.save()
+#         nursery_id = request.data.get('nursery_id')
+#         if nursery_id:
+#             try:
+#                 nursery = Nursery.objects.get(admin_id=nursery_id)
+#                 NurseryParent.objects.update_or_create(
+#                     nursery=nursery,
+#                     parent=parent,
+#                     child=child,
+#                     defaults={'status': 'pending'}
+#                 )
+#                 return Response({
+#                     'success': True,
+#                     'child_id': child.id,
+#                     'message': f'Request sent to nursery {nursery.name}'
+#                 }, status=status.HTTP_201_CREATED)
+#             except Nursery.DoesNotExist:
+#                 return Response({
+#                     'error': 'Nursery not found',
+#                     'code': 'NOT_FOUND'
+#                 }, status=status.HTTP_404_NOT_FOUND)
+#         return Response({'success': True, 'child_id': child.id}, status=status.HTTP_201_CREATED)
+#     return Response({'error': 'Invalid child data', 'details': serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def add_child(request):
-    if request.user.user_type != 'parent':
+    # التحقق من user_type
+    if hasattr(request.user, 'user_type') and request.user.user_type != 'parent':
         return Response({'error': 'Only parents can add children', 'code': 'NOT_PARENT'}, status=status.HTTP_403_FORBIDDEN)
     
-    parent = Parent.objects.get(admin=request.user)
+    # استخراج أو إنشاء الـ Parent باستخدام admin_id
+    try:
+        parent, created = Parent.objects.get_or_create(admin_id=request.user, defaults={
+            'full_name': request.user.first_name or request.user.email.split('@')[0],
+            'phone_number': request.data.get('phone_number', '')
+        })
+    except Parent.MultipleObjectsReturned:
+        parent = Parent.objects.filter(admin_id=request.user).first()
+
+    # تجميع بيانات الطفل
     child_data = {
         'parent': parent.id,
-        'first_name': request.data.get('first_name'),
-        'family_name': request.data.get('family_name'),
-        'religion': request.data.get('religion', ''),
-        'gender': request.data.get('gender'),
-        'address': request.data.get('address', 'Unknown'),
+        'child_name': request.data.get('child_name'),
         'date_of_birth': request.data.get('date_of_birth'),
-        'phone': request.data.get('phone', ''),
-        'guardian_job': request.data.get('guardian_job', 'Unknown')
+        'father_mother_name': request.data.get('father_mother_name'),
+        'job': request.data.get('job', ''),
+        'address': request.data.get('address', 'Unknown'),
+        'phone_number': request.data.get('phone_number', ''),
+        'another_phone_number': request.data.get('another_phone_number', ''),
+        'gender': request.data.get('gender', '')
     }
+
+    # التحقق من الحقول المطلوبة
+    required_fields = ['child_name', 'date_of_birth', 'father_mother_name', 'phone_number']
+    missing_fields = [field for field in required_fields if not child_data[field]]
+    if missing_fields:
+        return Response({
+            'error': f'Missing required fields: {", ".join(missing_fields)}',
+            'code': 'MISSING_FIELDS'
+        }, status=status.HTTP_400_BAD_REQUEST)
+    
+    # التحقق من الجنس
+    if child_data['gender'] and child_data['gender'] not in ['male', 'female']:
+        return Response({
+            'error': 'Gender must be "male" or "female"',
+            'code': 'INVALID_GENDER'
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+    # تصنيف البيانات وتخزينها
     serializer = ChildSerializer(data=child_data)
     if serializer.is_valid():
         child = serializer.save()
+        nursery_id = request.data.get('nursery_id')
+        if nursery_id:
+            try:
+                # استخدام admin_id بدل id
+                nursery = Nursery.objects.get(admin_id__id=nursery_id)  # استخدام admin_id__id
+                NurseryParent.objects.update_or_create(
+                    nursery=nursery,
+                    parent=parent,
+                    child=child,
+                    defaults={'status': 'pending'}
+                )
+                return Response({
+                    'success': True,
+                    'child_id': child.id,
+                    'message': f'Request sent to nursery {nursery.name}'
+                }, status=status.HTTP_201_CREATED)
+            except Nursery.DoesNotExist:
+                return Response({
+                    'error': 'Nursery not found',
+                    'code': 'NOT_FOUND'
+                }, status=status.HTTP_404_NOT_FOUND)
         return Response({'success': True, 'child_id': child.id}, status=status.HTTP_201_CREATED)
     return Response({'error': 'Invalid child data', 'details': serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def get_nurseries(request):
+    query = request.query_params.get('q', '')
+    nurseries = Nursery.objects.filter(status='accepted')
+    if query:
+        nurseries = nurseries.filter(
+            Q(name__icontains=query) | Q(address__icontains=query)
+        )
+    serializer = NurserySerializer(nurseries, many=True)
+    return Response(serializer.data, status=status.HTTP_200_OK)
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
@@ -863,9 +918,9 @@ def get_parent_requests(request):
 def update_parent_request(request, parent_id):
     try:
         parent = Parent.objects.get(id=parent_id)
-        user = parent.admin  # تصحيح لـ admin_id
+        user = parent.admin
         status = request.data.get('status')
-        if status not in ['pending', 'accepted', 'rejected']:
+        if status not in ['accepted', 'rejected']:  # نزلنا pending
             return Response({'error': 'Invalid status', 'code': 'INVALID_STATUS'}, status=status.HTTP_400_BAD_REQUEST)
         user.parent_request = f"Request for {parent.father_mother_name}"
         user.request_status = status
@@ -875,24 +930,36 @@ def update_parent_request(request, parent_id):
     except Parent.DoesNotExist:
         return Response({'error': 'Parent not found', 'code': 'NOT_FOUND'}, status=status.HTTP_404_NOT_FOUND)
 
-@api_view(['GET'])
+
+@api_view(['POST'])
 @permission_classes([IsAuthenticated, IsAdminUser])
-def get_nursery_requests(request):
-    users_with_requests = User.objects.filter(
-        nursery_request__isnull=False, nursery_request__ne='', user_type='nursery'
-    )
-    nurseries = [Nursery.objects.get(admin=user) for user in users_with_requests]
-    serializer = NurserySerializer(nurseries, many=True)
-    return Response({'requests': serializer.data}, status=status.HTTP_200_OK)
+def admin_approve_nursery(request, nursery_id):
+    try:
+        nursery = Nursery.objects.get(id=nursery_id)
+        status = request.data.get('status')
+        if status not in ['accepted', 'rejected']:
+            return Response({'error': 'Invalid status', 'code': 'INVALID_STATUS'}, status=status.HTTP_400_BAD_REQUEST)
+
+        nursery.status = status
+        nursery.save()
+        create_notification(
+            nursery,
+            title=f"Nursery {status.capitalize()}",
+            message=f"Your nursery {nursery.name} has been {status} by the admin.",
+            is_nursery=True
+        )
+        return Response({'success': True, 'message': f'Nursery status updated to {status}'}, status=status.HTTP_200_OK)
+    except Nursery.DoesNotExist:
+        return Response({'error': 'Nursery not found', 'code': 'NOT_FOUND'}, status=status.HTTP_404_NOT_FOUND)
 
 @api_view(['PATCH'])
 @permission_classes([IsAuthenticated, IsAdminUser])
 def update_nursery_request(request, nursery_id):
     try:
         nursery = Nursery.objects.get(id=nursery_id)
-        user = nursery.admin  # تصحيح لـ admin_id
+        user = nursery.admin
         status = request.data.get('status')
-        if status not in ['pending', 'accepted', 'rejected']:
+        if status not in ['accepted', 'rejected']:  # نزلنا pending
             return Response({'error': 'Invalid status', 'code': 'INVALID_STATUS'}, status=status.HTTP_400_BAD_REQUEST)
         nursery.status = status
         nursery.save()
@@ -903,3 +970,436 @@ def update_nursery_request(request, nursery_id):
         return Response({'success': True, 'message': f'Nursery status updated to {status}'}, status=status.HTTP_200_OK)
     except Nursery.DoesNotExist:
         return Response({'error': 'Nursery not found', 'code': 'NOT_FOUND'}, status=status.HTTP_404_NOT_FOUND)
+
+class AdminParentDashboard(APIView):
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    def get(self, request, parent_id=None):
+        if parent_id:
+            try:
+                parent = Parent.objects.get(id=parent_id)  # افتراض إن Parent عنده id كـ Primary Key
+                serializer = ParentSerializer(parent)
+                return Response(serializer.data, status=status.HTTP_200_OK)
+            except Parent.DoesNotExist:
+                return Response({'error': 'Parent not found', 'code': 'NOT_FOUND'}, status=status.HTTP_404_NOT_FOUND)
+        else:
+            parents = Parent.objects.filter(status='pending')  # افتراض إن عندك حقل status في Parent
+            serializer = ParentSerializer(parents, many=True)
+            return Response({
+                'pending_parents': serializer.data
+            }, status=status.HTTP_200_OK)
+
+    @transaction.atomic
+    def post(self, request, parent_id):
+        try:
+            parent = Parent.objects.get(id=parent_id)  # افتراض إن Parent عنده id كـ Primary Key
+            requested_status = request.data.get('status')
+            if requested_status not in ['accepted', 'rejected']:
+                return Response({'error': 'Invalid status', 'code': 'INVALID_STATUS'}, status=status.HTTP_400_BAD_REQUEST)
+
+            parent.status = requested_status  # افتراض إن عندك حقل status في Parent
+            parent.save()
+            create_notification(
+                parent,
+                title=f"Parent {requested_status.capitalize()}",
+                message=f"Your request as a parent has been {requested_status} by the admin.",
+                is_nursery=False
+            )
+            return Response({'success': True, 'message': f'Parent status updated to {requested_status}'}, status=status.HTTP_200_OK)
+        except Parent.DoesNotExist:
+            return Response({'error': 'Parent not found', 'code': 'NOT_FOUND'}, status=status.HTTP_404_NOT_FOUND)
+
+class AdminNurseryDashboard(APIView):
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    def get(self, request, nursery_id=None):
+        if nursery_id:
+            try:
+                nursery = Nursery.objects.get(admin_id=nursery_id)
+                serializer = NurserySerializer(nursery)
+                return Response(serializer.data, status=status.HTTP_200_OK)
+            except Nursery.DoesNotExist:
+                return Response({'error': 'Nursery not found', 'code': 'NOT_FOUND'}, status=status.HTTP_404_NOT_FOUND)
+        else:
+            nurseries = Nursery.objects.filter(status='pending')
+            serializer = NurserySerializer(nurseries, many=True)
+            return Response({
+                'pending_nurseries': serializer.data
+            }, status=status.HTTP_200_OK)
+
+    @transaction.atomic
+    def post(self, request, nursery_id=None):
+        if not nursery_id:
+            return Response({'error': 'Nursery ID is required', 'code': 'MISSING_NURSERY_ID'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            nursery = Nursery.objects.get(admin_id=nursery_id)
+            requested_status = request.data.get('status')
+            if requested_status not in ['accepted', 'rejected']:
+                return Response({'error': 'Invalid status', 'code': 'INVALID_STATUS'}, status=status.HTTP_400_BAD_REQUEST)
+
+            nursery.status = requested_status
+            nursery.save()
+            create_notification(
+                nursery,
+                title=f"Nursery {requested_status.capitalize()}",
+                message=f"Your nursery {nursery.name} has been {requested_status} by the admin.",
+                is_nursery=True
+            )
+            return Response({'success': True, 'message': f'Nursery status updated to {requested_status}'}, status=status.HTTP_200_OK)
+        except Nursery.DoesNotExist:
+            return Response({'error': 'Nursery not found', 'code': 'NOT_FOUND'}, status=status.HTTP_404_NOT_FOUND)
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, IsAdminUser])
+def get_nursery_requests(request):
+    users_with_requests = User.objects.filter(
+        nursery_request__isnull=False, nursery_request__ne='', user_type='nursery'
+    )
+    nurseries = [Nursery.objects.get(admin=user) for user in users_with_requests]
+    serializer = NurserySerializer(nurseries, many=True)
+    return Response({'requests': serializer.data}, status=status.HTTP_200_OK)
+
+
+class NurserySearchView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        search_query = request.query_params.get('q', None)
+        if search_query:
+            nurseries = Nursery.objects.filter(status='accepted', name__icontains=search_query)
+        else:
+            nurseries = Nursery.objects.filter(status='accepted')
+        serializer = NurserySerializer(nurseries, many=True)
+        return Response(serializer.data)
+
+# class NurseryInformationView(APIView):
+#     permission_classes = [IsAuthenticated]
+
+#     @transaction.atomic
+#     def post(self, request):
+#         user = request.user
+#         if user.user_type != 'nursery':
+#             return Response({
+#                 'error': 'Only nurseries can submit information',
+#                 'code': 'UNAUTHORIZED'
+#             }, status=403)
+
+#         try:
+#             nursery = Nursery.objects.get(admin_id=user)
+#         except Nursery.DoesNotExist:
+#             return Response({
+#                 'error': 'Nursery not found',
+#                 'code': 'NOT_FOUND'
+#             }, status=404)
+
+#         data = {
+#             'name': request.data.get('name', nursery.name),
+#             'phone_number': request.data.get('phone', nursery.phone_number),
+#             'address': request.data.get('location', nursery.address),
+#             'description': request.data.get('description', nursery.description),
+#             'longitude': request.data.get('longitude', nursery.longitude),
+#             'latitude': request.data.get('latitude', nursery.latitude),
+#             'image': request.data.get('photo', nursery.image),
+#             'status': 'pending'
+#         }
+#         serializer = NurserySerializer(nursery, data=data, partial=True)
+#         if serializer.is_valid():
+#             serializer.save()
+#             admin_users = User.objects.filter(user_type='admin')
+#             for admin in admin_users:
+#                 create_notification(
+#                     admin,
+#                     title="New Nursery Information Request",
+#                     message=f"Nursery {nursery.name} submitted information for approval.",
+#                     is_nursery=False
+#                 )
+#             return Response({
+#                 'success': True,
+#                 'message': 'Information submitted for approval',
+#                 'nursery_status': 'pending'
+#             }, status=200)
+#         return Response({
+#             'error': 'Invalid data',
+#             'details': serializer.errors
+#         }, status=400)
+
+#     def get(self, request):
+#         user = request.user
+#         if user.user_type != 'nursery':
+#             return Response({
+#                 'error': 'Only nurseries can access this page',
+#                 'code': 'UNAUTHORIZED'
+#             }, status=403)
+
+#         try:
+#             nursery = Nursery.objects.get(admin_id=user)
+#             if nursery.status != 'accepted':
+#                 return Response({
+#                     'error': 'Nursery not approved yet',
+#                     'code': 'NOT_APPROVED'
+#                 }, status=403)
+
+#             notifications = Notification.objects.filter(user=user).order_by('-created_at')[:5]
+#             menu = [
+#                 {'name': 'Home', 'url': '/nursery-information/', 'icon': 'home'},
+#                 {'name': 'Edit', 'url': '/nursery-edit/', 'icon': 'edit'},
+#                 {'name': 'Dashboard', 'url': f'/nursery-dashboard/{nursery.admin_id.id}/', 'icon': 'dashboard'}
+#             ]
+#             response_data = {
+#                 'success': True,
+#                 'nursery_data': {
+#                     'name': nursery.name,
+#                     'address': nursery.address,
+#                     'phone_number': nursery.phone_number,
+#                     'status': nursery.status
+#                 },
+#                 'notifications': NotificationSerializer(notifications, many=True).data,
+#                 'menu': menu
+#             }
+#             return Response(response_data, status=200)
+#         except Nursery.DoesNotExist:
+#             return Response({
+#                 'error': 'Nursery not found',
+#                 'code': 'NOT_FOUND'
+#             }, status=404)
+
+class NurseryInformationView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @csrf_exempt
+    @transaction.atomic
+    def post(self, request):
+        user = request.user
+        if user.user_type != 'nursery':
+            return Response({
+                'error': 'Only nurseries can submit information',
+                'code': 'UNAUTHORIZED'
+            }, status=403)
+
+        try:
+            nursery = Nursery.objects.get(admin_id=user)
+        except Nursery.DoesNotExist:
+            return Response({
+                'error': 'Nursery not found',
+                'code': 'NOT_FOUND'
+            }, status=404)
+
+        data = {
+            'name': request.data.get('name', nursery.name),
+            'phone_number': request.data.get('phone', nursery.phone_number),
+            'address': request.data.get('location', nursery.address),
+            'description': request.data.get('description', nursery.description),
+            'longitude': request.data.get('longitude', nursery.longitude),
+            'latitude': request.data.get('latitude', nursery.latitude),
+            'status': 'pending',
+        }
+
+        # Handle image field
+        if 'photo' in request.FILES:
+            data['image'] = request.FILES['photo']
+        elif 'photo' not in request.data:
+            data['image'] = nursery.image if nursery.image else None
+        else:
+            data['image'] = None  # Clear image if explicitly sent as empty
+
+        serializer = NurserySerializer(nursery, data=data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            admin_users = User.objects.filter(user_type='admin')
+            for admin in admin_users:
+                create_notification(
+                    admin,
+                    title="New Nursery Information Request",
+                    message=f"Nursery {nursery.name} submitted information for approval.",
+                    is_nursery=False
+                )
+            return Response({
+                'success': True,
+                'message': 'Information submitted for approval',
+                'nursery_status': 'pending'
+            }, status=200)
+        return Response({
+            'error': 'Invalid data',
+            'details': serializer.errors
+        }, status=400)
+
+    def get(self, request):
+        user = request.user
+        if user.user_type != 'nursery':
+            return Response({
+                'error': 'Only nurseries can access this page',
+                'code': 'UNAUTHORIZED'
+            }, status=403)
+
+        try:
+            nursery = Nursery.objects.get(admin_id=user)
+            if nursery.status != 'accepted':
+                return Response({
+                    'error': 'Nursery not approved yet',
+                    'code': 'NOT_APPROVED'
+                }, status=403)
+
+            notifications = Notification.objects.filter(user=user).order_by('-created_at')[:5]
+            menu = [
+                {'name': 'Home', 'url': '/nursery-information/', 'icon': 'home'},
+                {'name': 'Edit', 'url': '/nursery-edit/', 'icon': 'edit'},
+                {'name': 'Dashboard', 'url': f'/nursery-dashboard/{nursery.admin_id.id}/', 'icon': 'dashboard'}
+            ]
+            response_data = {
+                'success': True,
+                'nursery_data': {
+                    'name': nursery.name,
+                    'address': nursery.address,
+                    'phone_number': nursery.phone_number,
+                    'status': nursery.status
+                },
+                'notifications': NotificationSerializer(notifications, many=True).data,
+                'menu': menu
+            }
+            return Response(response_data, status=200)
+        except Nursery.DoesNotExist:
+            return Response({
+                'error': 'Nursery not found',
+                'code': 'NOT_FOUND'
+            }, status=404)
+class NurseryHomeView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+        if user.user_type != 'nursery':
+            return Response({
+                'error': 'Only nurseries can access this',
+                'code': 'UNAUTHORIZED'
+            }, status=status.HTTP_403_FORBIDDEN)
+
+        nursery = Nursery.objects.get(admin_id=user)
+        if nursery.status != 'approved':
+            return Response({
+                'error': 'Your nursery is not approved yet',
+                'code': 'UNAUTHORIZED'
+            }, status=status.HTTP_403_FORBIDDEN)
+
+        # افترض إن فيه نموذج Notification مرتبط بالـ user
+        notifications = Notification.objects.filter(user=user).order_by('-created_at')[:5]  # 5 إشعارات أخيرة
+        notification_serializer = NotificationSerializer(notifications, many=True)
+
+        return Response({
+            'success': True,
+            'nursery_data': NurserySerializer(nursery).data,
+            'notifications': notification_serializer.data,
+            'menu': [
+                {'title': 'Dashboard', 'url': '/nursery-dashboard/'},
+                {'title': 'Edit Information', 'url': '/nursery-edit/'}
+            ]
+        }, status=status.HTTP_200_OK)
+    
+    
+class NurseryEditView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @transaction.atomic
+    def post(self, request):
+        user = request.user
+        if user.user_type != 'nursery':
+            return Response({
+                'error': 'Only nurseries can edit information',
+                'code': 'UNAUTHORIZED'
+            }, status=status.HTTP_403_FORBIDDEN)
+
+        try:
+            nursery = Nursery.objects.get(admin_id=user)
+            if nursery.status != 'approved':
+                return Response({
+                    'error': 'Your nursery is not approved yet',
+                    'code': 'UNAUTHORIZED'
+                }, status=status.HTTP_403_FORBIDDEN)
+
+            data = {
+                'name': request.data.get('name', nursery.name),
+                'phone_number': request.data.get('phone', nursery.phone_number),
+                'capacity': request.data.get('capacity', nursery.capacity),
+                'address': request.data.get('location', nursery.address),
+                'description': request.data.get('description', nursery.description),
+                'longitude': request.data.get('longitude', nursery.longitude),
+                'latitude': request.data.get('latitude', nursery.latitude),
+                'image': request.data.get('photo', nursery.image),
+            }
+            serializer = NurserySerializer(nursery, data=data, partial=True)
+            if serializer.is_valid():
+                serializer.save()
+                return Response({
+                    'success': True,
+                    'message': 'Information updated successfully',
+                    'nursery_status': nursery.status
+                }, status=status.HTTP_200_OK)
+            return Response({
+                'error': 'Invalid data',
+                'details': serializer.errors
+            }, status=status.HTTP_400_BAD_REQUEST)
+        except Nursery.DoesNotExist:
+            return Response({
+                'error': 'Nursery not found',
+                'code': 'NOT_FOUND'
+            }, status=status.HTTP_404_NOT_FOUND)
+
+#//////////////////////////////
+class AdminNurseryDashboardView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if request.user.user_type != 'admin':
+            return Response({
+                'error': 'Only admins can access this',
+                'code': 'UNAUTHORIZED'
+            }, status=status.HTTP_403_FORBIDDEN)
+
+        nurseries = Nursery.objects.filter(status='pending')
+        serializer = NurserySerializer(nurseries, many=True)
+        return Response({
+            'success': True,
+            'pending_nurseries': serializer.data
+        }, status=status.HTTP_200_OK)
+
+    def post(self, request, nursery_id):
+        if request.user.user_type != 'admin':
+            return Response({
+                'error': 'Only admins can access this',
+                'code': 'UNAUTHORIZED'
+            }, status=status.HTTP_403_FORBIDDEN)
+
+        try:
+            nursery = Nursery.objects.get(id=nursery_id)
+            action = request.data.get('action')
+
+            if action not in ['accept', 'reject']:
+                return Response({
+                    'error': 'Invalid action',
+                    'code': 'INVALID_ACTION'
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            if action == 'accept':
+                nursery.status = 'approved'
+                message = f"Your nursery information for {nursery.name} has been accepted."
+            elif action == 'reject':
+                nursery.status = 'rejected'
+                message = f"Your nursery information for {nursery.name} has been rejected."
+
+            nursery.save()
+            create_notification(
+                nursery.admin,
+                title=f"Nursery Request {action.capitalize()}",
+                message=message,
+                is_nursery=True
+            )
+            return Response({
+                'success': True,
+                'message': f'Nursery request {action}ed',
+                'nursery_status': nursery.status
+            }, status=status.HTTP_200_OK)
+        except Nursery.DoesNotExist:
+            return Response({
+                'error': 'Nursery not found',
+                'code': 'NOT_FOUND'
+            }, status=status.HTTP_404_NOT_FOUND)
+        
