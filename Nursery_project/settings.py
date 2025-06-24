@@ -10,7 +10,7 @@ DEBUG = True  # وضع التطوير (تعطيل في الإنتاج)
 ALLOWED_HOSTS = [
     '*',  # للتنمية فقط
     'nursery-api-zzo0.onrender.com',
-    '4a8c-197-120-180-55.ngrok-free.app',  # ⬅️ رابط ngrok بدون https://
+    '6ca8-217-52-188-188.ngrok-free.app',  # ⬅️ رابط ngrok بدون https://
     'localhost',
     '127.0.0.1'
 ]
@@ -96,7 +96,7 @@ AUTH_USER_MODEL = 'App.User'
 # CORS_ALLOW_ALL_ORIGINS = True  # للتنمية فقط
 CORS_ALLOWED_ORIGINS = [
     'https://nursery-api-zzo0.onrender.com', 
-    'https://4a8c-197-120-180-55.ngrok-free.app', # ⬅️ رابط ngrok مع https://
+    'https://6ca8-217-52-188-188.ngrok-free.app', # ⬅️ رابط ngrok مع https://
     'http://localhost:8000',
     'http://127.0.0.1:8000'
 ]
@@ -108,7 +108,7 @@ CORS_ALLOW_HEADERS = ['*']
 CSRF_COOKIE_SECURE = False  # تعطيل في التنمية
 SESSION_COOKIE_SECURE = False  # تعطيل في التنمية
 CSRF_TRUSTED_ORIGINS = [
-    'https://4a8c-197-120-180-55.ngrok-free.app',  # ⬅️ رابط ngrok مع https://
+    'https://6ca8-217-52-188-188.ngrok-free.app',  # ⬅️ رابط ngrok مع https://
     'http://localhost:8000',
     'http://127.0.0.1:8000'
 ]
